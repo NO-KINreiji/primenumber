@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>EXTREME Browser Stress Test</title>
+
+<style>
+*{box-sizing:border-box}
+
+html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#000;
+    color:#fff;
+    font-family:monospace;
+}
+
+#panel{
+    position:fixed;
+    z-index:999999;
+    top:0;
+    left:0;
+    width:100%;
+    padding:10px;
+    background:#080808;
+    border-bottom:1px solid #444;
+}
+
+button{
+    padding:10px 16px;
+    margin:3px;
+    background:#222;
+    color:#fff;
+    border:1px solid #666;
+    border-radius:5px;
+    font-weight:bold;
+}
+
+#start{background:#b00000}
+#stop{background:#006000}
+
+input{
+    width:130px;
+    vertical-align:middle;
+}
+
+#stats{
+    margin-top:7px;
+    font-size:12px;
+    line-height:1.5;
+}
+
+#stage{
+    position:absolute;
+    top:95px;
+    left:0;
+    width:100%;
+    height:calc(100% - 95px);
+}
+
+canvas{
+    width:100%;
+    height:100%;
+    display:block;
+}
+</style>
+</head>
+
+<body>
+
+<div id="panel">
+
+    <button id="start">🔥 EXTREME START</button>
+    <button id="stop">■ STOP</button>
+
+    <label>
+        CPU
+        <input id="cpu" type="range" min="1" max="100" value="100">
+        <b id="cpuV">100</b>
+    </label>
+
+    <label>
+        GPU
+        <input id="gpu" type="range" min="1" max="100" value="100">
+        <b id="gpuV">100</b>
+    </label>
+
+    <label>
+        WORKERS
+        <input id="workers" type="range" min="1" max="16" value="8">
+        <b id="workersV">8</b>
+    </label>
+
+    <label>
+        MEMORY
+        <input id="memory" type="range" min="1" max="512" value="256">
+        <b id="memoryV">256MB</b>
+    </label>
+
+    <div id="stats">
+        READY
+    </div>
+
+</div>
+
+<div id="stage">
+    <canvas id="canvas"></canvas>
+</div>
+
+
+<script>
+
+"use strict";
+
+
+/* =========================================================
+   CONFIGURATION
+========================================================= */
+
+const MAX_MEMORY_MB = 4096;
+const MAX_WORKERS = 64;
+
+let running = false;
+let workers = [];
+let memoryBlocks = [];
+
+let startTime = 0;
+let frames = 0;
+let fps = 0;
+let lastFPS = performance.now();
+
+let raf = null;
+
+
+/* =========================================================
+   ELEMENTS
+========================================================= */
+
+const canvas =
+    document.getElementById("canvas");
+
+const ctx =
+    canvas.getContext("2d", {
+        alpha:false,
+        desynchronized:false
+    });
+
+const cpuSlider =
+    document.getElementById("cpu");
+
+const gpuSlider =
+    document.getElementById("gpu");
+
+const workerSlider =
+    document.getElementById("workers");
+
+const memorySlider =
+    document.getElementById("memory");
+
+const stats =
+    document.getElementById("stats");
+
+
+cpuSlider.oninput =
+    () => cpuV.textContent = cpuSlider.value;
+
+gpuSlider.oninput =
+    () => gpuV.textContent = gpuSlider.value;
+
+workerSlider.oninput =
+    () => workersV.textContent = workerSlider.value;
+
+memorySlider.oninput =
+    () => memoryV.textContent =
+        memorySlider.value + "MB";
+
+
+/* =========================================================
+   CANVAS
+========================================================= */
+
+function resize(){
+
+    const dpr =
+        Math.min(
+            window.devicePixelRatio || 1,
+            2
+        );
+
+    canvas.width =
+        Math.floor(innerWidth * dpr);
+
+    canvas.height =
+        Math.floor(
+            (innerHeight - 95) * dpr
+        );
+
+    ctx.setTransform(
+        dpr,0,0,dpr,0,0
+    );
+}
+
+resize();
+
+addEventListener(
+    "resize",
+    resize,
+    {passive:true}
+);
+
+
+/* =========================================================
+   CPU STRESS
+========================================================= */
+
+function heavyMath(iterations){
+
+    let a = 0.123456789;
+
+    for(let i=0;i<iterations;i++){
+
+        a =
+            Math.sin(a * 1.000001) *
+            Math.cos(a + 0.000001) +
+            Math.sqrt(
+                Math.abs(a) + 1
+            );
+
+        a =
+            Math.tan(
+                Math.atan(a)
+            ) + 0.0000001;
+
+        a =
+            Math.log(
+                Math.abs(a) + 1.000001
+            );
+
+        a =
+            Math.exp(
+                Math.min(a,10)
+            ) * 0.000001;
+    }
+
+    return a;
+}
+
+
+function cpuStress(){
+
+    const level =
+        Number(cpuSlider.value);
+
+    /*
+      1フレームあたりの計算量。
+      最大でもブラウザのイベントループを
+      永久に占有しないよう上限を設定。
+    */
+
+    const iterations =
+        Math.floor(
+            50000 +
+            level * 120000
+        );
+
+    heavyMath(iterations);
+}
+
+
+/* =========================================================
+   MEMORY STRESS
+========================================================= */
+
+function memoryStress(){
+
+    const target =
+        Math.min(
+            Number(memorySlider.value),
+            MAX_MEMORY_MB
+        );
+
+    const targetBytes =
+        target * 1024 * 1024;
+
+    /*
+      8MB単位で確保。
+      ArrayBufferなのでJSヒープとは別の
+      ArrayBuffer領域への負荷を観測できる。
+    */
+
+    const blockSize =
+        8 * 1024 * 1024;
+
+    while(
+        memoryBlocks.reduce(
+            (sum,b) => sum + b.byteLength,
+            0
+        ) < targetBytes
+    ){
+
+        if(
+            memoryBlocks.length >=
+            Math.ceil(
+                MAX_MEMORY_MB / 8
+            )
+        ) break;
+
+        const block =
+            new Uint8Array(blockSize);
+
+        /*
+          実際にページへ触れて
+          lazy allocationだけにならないようにする。
+        */
+
+        for(
+            let i=0;
+            i<block.length;
+            i+=4096
+        ){
+            block[i] =
+                (i * 31) & 255;
+        }
+
+        memoryBlocks.push(block);
+    }
+}
+
+
+/* =========================================================
+   WORKER
+========================================================= */
+
+const workerSource = `
+
+let running = true;
+
+function burn(){
+
+    let x = Math.random();
+
+    /*
+      Worker側でもCPU負荷を発生。
+    */
+
+    for(
+        let i=0;
+        i<220000;
+        i++
+    ){
+
+        x =
+            Math.sin(x * 1.000001) *
+            Math.cos(x + 0.000001);
+
+        x =
+            Math.sqrt(
+                Math.abs(x)+1
+            );
+
+        x =
+            Math.log(
+                x + 1.000001
+            );
+    }
+
+    if(running)
+        setTimeout(burn,0);
+}
+
+self.onmessage = e => {
+
+    if(e.data === "start")
+        burn();
+
+    if(e.data === "stop")
+        running = false;
+};
+
+`;
+
+
+function createWorker(){
+
+    const blob =
+        new Blob(
+            [workerSource],
+            {
+                type:
+                "application/javascript"
+            }
+        );
+
+    const url =
+        URL.createObjectURL(blob);
+
+    const worker =
+        new Worker(url);
+
+    worker.postMessage("start");
+
+    return {
+        worker,
+        url
+    };
+}
+
+
+function updateWorkers(){
+
+    const target =
+        Math.min(
+            Number(workerSlider.value),
+            MAX_WORKERS
+        );
+
+    while(
+        workers.length < target
+    ){
+        workers.push(
+            createWorker()
+        );
+    }
+
+    while(
+        workers.length > target
+    ){
+
+        const item =
+            workers.pop();
+
+        item.worker.postMessage("stop");
+        item.worker.terminate();
+
+        URL.revokeObjectURL(
+            item.url
+        );
+    }
+}
+
+
+/* =========================================================
+   GPU / CANVAS STRESS
+========================================================= */
+
+function gpuStress(){
+
+    const level =
+        Number(gpuSlider.value);
+
+    const w = innerWidth;
+    const h = innerHeight - 95;
+
+    /*
+      レベルに応じて描画オブジェクト数を増加。
+    */
+
+    const count =
+        Math.floor(
+            1000 +
+            level * 100
+        );
+
+    ctx.globalCompositeOperation =
+        "lighter";
+
+    for(
+        let i=0;
+        i<count;
+        i++
+    ){
+
+        const x =
+            Math.random() * w;
+
+        const y =
+            Math.random() * h;
+
+        const r =
+            1 + Math.random() * 30;
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            r,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fillStyle =
+            `hsl(${Math.random()*360},100%,50%)`;
+
+        ctx.fill();
+    }
+
+    /*
+      大量の画像処理相当。
+    */
+
+    const image =
+        ctx.getImageData(
+            0,
+            0,
+            Math.min(w,1000),
+            Math.min(h,500)
+        );
+
+    const data =
+        image.data;
+
+    for(
+        let i=0;
+        i<data.length;
+        i+=4
+    ){
+
+        data[i] =
+            255 - data[i];
+
+        data[i+1] =
+            255 - data[i+1];
+
+        data[i+2] =
+            255 - data[i+2];
+    }
+
+    ctx.putImageData(
+        image,
+        0,
+        0
+    );
+
+    ctx.globalCompositeOperation =
+        "source-over";
+}
+
+
+/* =========================================================
+   FPS
+========================================================= */
+
+function updateFPS(){
+
+    frames++;
+
+    const now =
+        performance.now();
+
+    if(
+        now - lastFPS >= 1000
+    ){
+
+        fps = frames;
+
+        frames = 0;
+
+        lastFPS = now;
+    }
+}
+
+
+/* =========================================================
+   MAIN LOOP
+========================================================= */
+
+function loop(){
+
+    if(!running)
+        return;
+
+    /*
+      背景クリア
+    */
+
+    ctx.fillStyle = "#000";
+
+    ctx.fillRect(
+        0,
+        0,
+        innerWidth,
+        innerHeight
+    );
+
+
+    /*
+      CPU
+    */
+
+    cpuStress();
+
+
+    /*
+      Memory
+    */
+
+    memoryStress();
+
+
+    /*
+      Workers
+    */
+
+    updateWorkers();
+
+
+    /*
+      GPU / Rendering
+    */
+
+    gpuStress();
+
+
+    /*
+      FPS
+    */
+
+    updateFPS();
+
+
+    const elapsed =
+        (
+            performance.now() -
+            startTime
+        ) / 1000;
+
+
+    const mem =
+        memoryBlocks.reduce(
+            (sum,b) =>
+                sum + b.byteLength,
+            0
+        ) / 1024 / 1024;
+
+
+    stats.textContent =
+        "RUNNING | " +
+        "FPS: " + fps +
+        " | Workers: " +
+        workers.length +
+        " | ArrayBuffer: " +
+        mem.toFixed(0) +
+        "MB | Time: " +
+        elapsed.toFixed(1) +
+        "s";
+
+
+    raf =
+        requestAnimationFrame(
+            loop
+        );
+}
+
+
+/* =========================================================
+   START
+========================================================= */
+
+function start(){
+
+    if(running)
+        return;
+
+    running = true;
+
+    startTime =
+        performance.now();
+
+    frames = 0;
+
+    fps = 0;
+
+    lastFPS =
+        performance.now();
+
+    /*
+      初期メモリ確保
+    */
+
+    memoryStress();
+
+    updateWorkers();
+
+    loop();
+}
+
+
+/* =========================================================
+   STOP
+========================================================= */
+
+function stop(){
+
+    running = false;
+
+    if(raf !== null){
+
+        cancelAnimationFrame(
+            raf
+        );
+
+        raf = null;
+    }
+
+
+    /*
+      Worker停止
+    */
+
+    for(
+        const item of workers
+    ){
+
+        item.worker.postMessage(
+            "stop"
+        );
+
+        item.worker.terminate();
+
+        URL.revokeObjectURL(
+            item.url
+        );
+    }
+
+    workers = [];
+
+
+    /*
+      メモリ解放
+    */
+
+    memoryBlocks = [];
+
+
+    /*
+      Canvas解放
+    */
+
+    ctx.clearRect(
+        0,
+        0,
+        innerWidth,
+        innerHeight
+    );
+
+
+    stats.textContent =
+        "STOPPED";
+}
+
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+document
+    .getElementById("start")
+    .onclick = start;
+
+document
+    .getElementById("stop")
+    .onclick = stop;
+
+
+/* =========================================================
+   EMERGENCY STOP
+========================================================= */
+
+window.addEventListener(
+    "keydown",
+    e => {
+
+        if(
+            e.key === "Escape"
+        ){
+            stop();
+        }
+
+    }
+);
+
+</script>
+
+</body>
+</html>
