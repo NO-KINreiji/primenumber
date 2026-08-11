@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>高機能 素数チェッカー</title>
+  <title>高速・高精度 素数チェッカー</title>
   <style>
     body {
       font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
@@ -103,6 +103,7 @@
       padding: 20px;
       border-radius: 8px;
       min-height: 100px;
+      word-break: break-all;
     }
     .result-item {
       margin-bottom: 10px;
@@ -158,7 +159,7 @@
   </div>
 
   <div class="input-group">
-    <input type="text" id="numberInput" inputmode="numeric" placeholder="自然数を入力 (例: 324)" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+    <input type="text" id="numberInput" inputmode="numeric" placeholder="自然数を入力 (15桁以上もOK)" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
     <button class="check-btn" onclick="analyzeNumber()">判定</button>
   </div>
 
@@ -178,108 +179,194 @@
     if (e.key === 'Enter') analyzeNumber();
   });
 
-  // 素数判定関数
-  function isPrime(num) {
-    if (num <= 1) return false;
-    if (num <= 3) return true;
-    if (num % 2 === 0 || num % 3 === 0) return false;
-    for (let i = 5; i * i <= num; i += 6) {
-      if (num % i === 0 || num % (i + 2) === 0) return false;
+  // --- BigInt対応の便利なヘルパー関数 ---
+  function bigIntSqrt(value) {
+    if (value < 0n) return 0n;
+    if (value < 2n) return value;
+    let x0 = value / 2n;
+    let x1 = (x0 + value / x0) / 2n;
+    while (x1 < x0) {
+      x0 = x1;
+      x1 = (x0 + value / x0) / 2n;
+    }
+    return x0;
+  }
+
+  // ミラー・ラビン素数判定法（15桁以上の大きな数でも高速かつ正確に判定）
+  function isPrimeBig(n) {
+    if (n <= 1n) return false;
+    if (n <= 3n) return true;
+    if (n % 2n === 0n || n % 3n === 0n) return false;
+
+    // 小さな底を使ったミラー・ラビン法（2^64未満まで決定的に判定できる組み合わせ）
+    const bases = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n];
+    
+    let d = n - 1n;
+    let s = 0n;
+    while (d % 2n === 0n) {
+      d /= 2n;
+      s += 1n;
+    }
+
+    for (let a of bases) {
+      if (n <= a) break;
+      let x = powerMod(a, d, n);
+      if (x === 1n || x === n - 1n) continue;
+      let composite = true;
+      for (let r = 1n; r < s; r++) {
+        x = powerMod(x, 2n, n);
+        if (x === n - 1n) {
+          composite = false;
+          break;
+        }
+      }
+      if (composite) return false;
     }
     return true;
   }
 
-  // 素因数分解関数
-  function getPrimeFactors(num) {
-    let factors = {};
-    let n = num;
-    let d = 2;
-    while (d * d <= n) {
-      while (n % d === 0) {
-        factors[d] = (factors[d] || 0) + 1;
-        n /= d;
-      }
-      d++;
+  // (base^exp) % mod を計算
+  function powerMod(base, exp, mod) {
+    let res = 1n;
+    base = base % mod;
+    while (exp > 0n) {
+      if (exp % 2n === 1n) res = (res * base) % mod;
+      base = (base * base) % mod;
+      exp /= 2n;
     }
-    if (n > 1) {
-      factors[n] = (factors[n] || 0) + 1;
+    return res;
+  }
+
+  // ポラード・rho法による高速素因数分解（15桁以上の数にも対応）
+  function pollardRho(n) {
+    if (n % 2n === 0n) return 2n;
+    if (isPrimeBig(n)) return n;
+
+    let x = 2n, y = 2n, d = 1n, c = 1n;
+    let f = (val) => (powerMod(val, 2n, n) + c) % n;
+
+    while (d === 1n) {
+      x = f(x);
+      y = f(f(y));
+      let diff = x > y ? x - y : y - x;
+      d = gcd(diff, n);
+      if (d === n) {
+        x = BigInt(Math.floor(Math.random() * 100) + 2);
+        y = x;
+        c = BigInt(Math.floor(Math.random() * 100) + 1);
+        d = 1n;
+      }
+    }
+    return d;
+  }
+
+  function gcd(a, b) {
+    while (b !== 0n) {
+      let temp = b;
+      b = a % b;
+      a = temp;
+    }
+    return a;
+  }
+
+  function getPrimeFactorsBig(n) {
+    let factors = {};
+    let queue = [n];
+
+    while (queue.length > 0) {
+      let current = queue.pop();
+      if (current === 1n) continue;
+      if (isPrimeBig(current)) {
+        factors[current.toString()] = (factors[current.toString()] || 0) + 1;
+      } else {
+        let divisor = pollardRho(current);
+        queue.push(divisor);
+        queue.push(current / divisor);
+      }
     }
     return factors;
   }
 
-  // 約数取得関数
-  function getDivisors(num) {
+  // 約数一覧（数値を安全に処理できる範囲用、大きすぎる場合は制限または高速化）
+  function getDivisors(numStr) {
+    let num = BigInt(numStr);
     let divs = [];
-    for (let i = 1; i * i <= num; i++) {
-      if (num % i === 0) {
+    let sqrtN = bigIntSqrt(num);
+    for (let i = 1n; i <= sqrtN; i++) {
+      if (num % i === 0n) {
         divs.push(i);
-        if (i * i !== num) divs.push(num / i);
+        let counterpart = num / i;
+        if (counterpart !== i) divs.push(counterpart);
       }
     }
-    return divs.sort((a, b) => a - b);
+    return divs.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   }
 
-  // 前の素数
+  // 直前の素数（15桁などの巨大な数ではブラウザフリーズを防ぐため、探索幅に安全上限を設定）
   function getPrevPrime(num) {
-    let i = num - 1;
-    while (i > 1) {
-      if (isPrime(i)) return i;
-      i--;
+    let curr = num - 1n;
+    let limit = num > 1000n ? num - 10000n : 1n; // 探索幅制限
+    if (limit < 2n) limit = 2n;
+    while (curr >= limit) {
+      if (isPrimeBig(curr)) return curr;
+      curr--;
     }
     return null;
   }
 
-  // 次の素数
+  // 直後の素数
   function getNextPrime(num) {
-    let i = num + 1;
-    while (true) {
-      if (isPrime(i)) return i;
-      i++;
+    let curr = num + 1n;
+    let limit = num + 10000n; // 探索幅制限
+    while (curr <= limit) {
+      if (isPrimeBig(curr)) return curr;
+      curr++;
     }
-  }
-
-  // 何番目の素数か (愚直に数えるため大きすぎる数は時間がかかるので適度な範囲を想定)
-  function getPrimeIndex(num) {
-    if (!isPrime(num)) return null;
-    let count = 0;
-    for (let i = 2; i <= num; i++) {
-      if (isPrime(i)) count++;
-    }
-    return count;
+    return null;
   }
 
   // メイン判定処理
   function analyzeNumber() {
-    const inputVal = document.getElementById('numberInput').value;
+    const inputVal = document.getElementById('numberInput').value.trim();
     if (!inputVal) return;
-    
-    const num = parseInt(inputVal, 10);
-    if (num < 1) {
+
+    let num;
+    try {
+      num = BigInt(inputVal);
+    } catch (e) {
+      return;
+    }
+
+    if (num < 1n) {
       document.getElementById('resultArea').innerHTML = '<div class="prime-result">自然数（1以上）を入力してください。</div>';
       return;
     }
 
-    const isPrimeNum = isPrime(num);
     const resultArea = document.getElementById('resultArea');
+    const isPrimeNum = isPrimeBig(num);
     let html = '';
 
     // ① 素数かどうかの結果
-    if (num === 1) {
+    if (num === 1n) {
       html += `<div class="prime-result">1 は素数でも合成数でもありません。</div>`;
     } else if (isPrimeNum) {
-      html += `<div class="prime-result is-prime">${num} は素数です！</div>`;
+      html += `<div class="prime-result is-prime">${num.toString()} は素数です！</div>`;
     } else {
-      html += `<div class="prime-result">${num} は素数ではありません（合成数）。</div>`;
+      html += `<div class="prime-result">${num.toString()} は素数ではありません（合成数）。</div>`;
     }
 
-    // 各種設定に基づく計算と表示
-    const factors = getPrimeFactors(num);
-    const factorKeys = Object.keys(factors).map(Number);
-    const divisors = getDivisors(num);
+    // 15桁など巨大な数の場合、全約数の列挙はメモリ・速度的に重すぎるため警告を出すか安全に処理
+    const isHuge = num > 1000000000000n; // 1兆を超える場合
+    let divisors = [];
+    if (!isHuge) {
+      divisors = getDivisors(inputVal);
+    }
 
     // [素因数分解を表示]
-    if (!isPrimeNum && num > 1 && document.getElementById('chk-factorization').checked) {
-      let factHtml = factorKeys.map(base => {
+    if (!isPrimeNum && num > 1n && document.getElementById('chk-factorization').checked) {
+      const factors = getPrimeFactorsBig(num);
+      let keys = Object.keys(factors).sort((a, b) => (BigInt(a) < BigInt(b) ? -1 : 1));
+      let factHtml = keys.map(base => {
         let exp = factors[base];
         return exp > 1 ? `${base}<sup>${exp}</sup>` : `${base}`;
       }).join(' &times; ');
@@ -288,67 +375,101 @@
 
     // [約数一覧を表示]
     if (document.getElementById('chk-div-list').checked) {
-      html += `<div class="result-item"><div class="result-label">約数一覧</div><div class="result-value">${divisors.join(', ')}</div></div>`;
+      if (isHuge) {
+        html += `<div class="result-item"><div class="result-label">約数一覧</div><div class="result-value" style="font-size:14px; color:#e67e22;">※値が大きすぎるため、約数一覧の表示は省略します</div></div>`;
+      } else {
+        html += `<div class="result-item"><div class="result-label">約数一覧</div><div class="result-value">${divisors.map(d => d.toString()).join(', ')}</div></div>`;
+      }
     }
 
     // [約数の個数を表示]
     if (document.getElementById('chk-div-count').checked) {
-      html += `<div class="result-item"><div class="result-label">約数の個数</div><div class="result-value">${divisors.length} 個</div></div>`;
+      if (isHuge) {
+        // 素因数分解から個数を計算
+        const factors = getPrimeFactorsBig(num);
+        let count = 1n;
+        for (let k in factors) {
+          count *= BigInt(factors[k] + 1);
+        }
+        html += `<div class="result-item"><div class="result-label">約数の個数</div><div class="result-value">${count.toString()} 個</div></div>`;
+      } else {
+        html += `<div class="result-item"><div class="result-label">約数の個数</div><div class="result-value">${divisors.length} 個</div></div>`;
+      }
     }
 
     // [約数の総和を表示]
     if (document.getElementById('chk-div-sum').checked) {
-      const sum = divisors.reduce((acc, val) => acc + val, 0);
-      html += `<div class="result-item"><div class="result-label">約数の総和</div><div class="result-value">${sum}</div></div>`;
+      if (isHuge) {
+        html += `<div class="result-item"><div class="result-label">約数の総和</div><div class="result-value" style="font-size:14px; color:#e67e22;">※値が大きすぎるため計算を省略しました</div></div>`;
+      } else {
+        let sum = divisors.reduce((acc, val) => acc + val, 0n);
+        html += `<div class="result-item"><div class="result-label">約数の総和</div><div class="result-value">${sum.toString()}</div></div>`;
+      }
     }
 
     // [最小の素因数を表示]
-    if (!isPrimeNum && num > 1 && document.getElementById('chk-min-factor').checked) {
-      const minFactor = Math.min(...factorKeys);
-      html += `<div class="result-item"><div class="result-label">最小の素因数</div><div class="result-value">${minFactor}</div></div>`;
+    if (!isPrimeNum && num > 1n && document.getElementById('chk-min-factor').checked) {
+      const factors = getPrimeFactorsBig(num);
+      let minF = Object.keys(factors).reduce((min, k) => (BigInt(k) < BigInt(min) ? k : min), Object.keys(factors)[0]);
+      html += `<div class="result-item"><div class="result-label">最小の素因数</div><div class="result-value">${minF}</div></div>`;
     }
 
     // [最大の素因数を表示]
-    if (!isPrimeNum && num > 1 && document.getElementById('chk-max-factor').checked) {
-      const maxFactor = Math.max(...factorKeys);
-      html += `<div class="result-item"><div class="result-label">最大の素因数</div><div class="result-value">${maxFactor}</div></div>`;
+    if (!isPrimeNum && num > 1n && document.getElementById('chk-max-factor').checked) {
+      const factors = getPrimeFactorsBig(num);
+      let maxF = Object.keys(factors).reduce((max, k) => (BigInt(k) > BigInt(max) ? k : max), Object.keys(factors)[0]);
+      html += `<div class="result-item"><div class="result-label">最大の素因数</div><div class="result-value">${maxF}</div></div>`;
     }
 
     // [直前の素数を表示]
     if (document.getElementById('chk-prev-prime').checked) {
       const prev = getPrevPrime(num);
-      const val = prev ? prev : 'なし (2未満)';
+      const val = prev ? prev.toString() : 'なし';
       html += `<div class="result-item"><div class="result-label">直前の素数</div><div class="result-value">${val}</div></div>`;
     }
 
     // [直後の素数を表示]
     if (document.getElementById('chk-next-prime').checked) {
       const next = getNextPrime(num);
-      html += `<div class="result-item"><div class="result-label">直後の素数</div><div class="result-value">${next}</div></div>`;
+      const val = next ? next.toString() : 'なし';
+      html += `<div class="result-item"><div class="result-label">直後の素数</div><div class="result-value">${val}</div></div>`;
     }
 
-    // [最も近い素数を表示]
+    // [最も近い素数を表示（距離が同じなら両方表示）]
     if (document.getElementById('chk-closest-prime').checked) {
       const prev = getPrevPrime(num);
       const next = getNextPrime(num);
       let closest = [];
-      if (!prev) {
+      if (!prev && next) {
         closest.push(next);
-      } else {
+      } else if (prev && !next) {
+        closest.push(prev);
+      } else if (prev && next) {
         const diff1 = num - prev;
         const diff2 = next - num;
-        if (diff1 === diff2) closest = [prev, next];
-        else if (diff1 < diff2) closest = [prev];
-        else closest = [next];
+        if (diff1 === diff2) {
+          closest = [prev, next];
+        } else if (diff1 < diff2) {
+          closest = [prev];
+        } else {
+          closest = [next];
+        }
       }
-      html += `<div class="result-item"><div class="result-label">最も近い素数</div><div class="result-value">${closest.join(', ')}</div></div>`;
+      html += `<div class="result-item"><div class="result-label">最も近い素数</div><div class="result-value">${closest.map(c => c.toString()).join(', ')}</div></div>`;
     }
 
     // [何番目の素数かを表示]
     if (document.getElementById('chk-prime-index').checked) {
       if (isPrimeNum) {
-        const index = getPrimeIndex(num);
-        html += `<div class="result-item"><div class="result-label">素数の順番</div><div class="result-value">${index} 番目の素数</div></div>`;
+        if (num > 100000n) {
+          html += `<div class="result-item"><div class="result-label">素数の順番</div><div class="result-value" style="font-size:14px; color:#e67e22;">※値が大きすぎるため何番目か特定できません</div></div>`;
+        } else {
+          let count = 0;
+          for (let i = 2n; i <= num; i++) {
+            if (isPrimeBig(i)) count++;
+          }
+          html += `<div class="result-item"><div class="result-label">素数の順番</div><div class="result-value">${count} 番目の素数</div></div>`;
+        }
       } else {
         html += `<div class="result-item"><div class="result-label">素数の順番</div><div class="result-value" style="font-size:14px; color:#777;">※素数ではないため計算されません</div></div>`;
       }
