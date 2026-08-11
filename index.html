@@ -1,789 +1,204 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>EXTREME Browser Stress Test</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prime Checker</title>
+    <style>
+        /* ベースリセットと画面全体の設定 */
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #fafafa;
+            color: #333;
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", "Yu Gothic", sans-serif;
+            box-sizing: border-box;
+        }
 
-<style>
-*{box-sizing:border-box}
+        /* 中央のメインコンテナ */
+        .container {
+            width: 90%;
+            max-width: 420px;
+            padding: 2.5rem 2rem;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04);
+            text-align: center;
+        }
 
-html,body{
-    margin:0;
-    width:100%;
-    height:100%;
-    overflow:hidden;
-    background:#000;
-    color:#fff;
-    font-family:monospace;
-}
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+            margin-bottom: 2rem;
+            color: #1a1a1a;
+        }
 
-#panel{
-    position:fixed;
-    z-index:999999;
-    top:0;
-    left:0;
-    width:100%;
-    padding:10px;
-    background:#080808;
-    border-bottom:1px solid #444;
-}
+        /* 入力フィールド */
+        input[type="text"] {
+            width: 100%;
+            padding: 14px;
+            font-size: 1.2rem;
+            text-align: center;
+            border: 1px solid #eaeaea;
+            border-radius: 8px;
+            background-color: #fdfdfd;
+            box-sizing: border-box;
+            outline: none;
+            transition: all 0.3s ease;
+            font-family: monospace;
+        }
 
-button{
-    padding:10px 16px;
-    margin:3px;
-    background:#222;
-    color:#fff;
-    border:1px solid #666;
-    border-radius:5px;
-    font-weight:bold;
-}
+        input[type="text"]:focus {
+            border-color: #b0b0b0;
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+        }
 
-#start{background:#b00000}
-#stop{background:#006000}
+        /* ボタン */
+        button {
+            margin-top: 1.5rem;
+            width: 100%;
+            padding: 14px;
+            font-size: 1rem;
+            letter-spacing: 0.05em;
+            color: #fff;
+            background-color: #222;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
 
-input{
-    width:130px;
-    vertical-align:middle;
-}
+        button:hover {
+            background-color: #444;
+        }
 
-#stats{
-    margin-top:7px;
-    font-size:12px;
-    line-height:1.5;
-}
+        button:active {
+            transform: scale(0.98);
+        }
 
-#stage{
-    position:absolute;
-    top:95px;
-    left:0;
-    width:100%;
-    height:calc(100% - 95px);
-}
+        /* 結果表示エリア */
+        #result {
+            margin-top: 2rem;
+            font-size: 1.2rem;
+            font-weight: 500;
+            min-height: 1.5em;
+            word-break: break-all;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
 
-canvas{
-    width:100%;
-    height:100%;
-    display:block;
-}
-</style>
+        #result.show {
+            opacity: 1;
+        }
+
+        .prime { color: #2ecc71; }
+        .not-prime { color: #e74c3c; }
+        .error { color: #888; font-size: 0.9rem; font-weight: normal; }
+    </style>
 </head>
-
 <body>
 
-<div id="panel">
-
-    <button id="start">🔥 EXTREME START</button>
-    <button id="stop">■ STOP</button>
-
-    <label>
-        CPU
-        <input id="cpu" type="range" min="1" max="100" value="100">
-        <b id="cpuV">100</b>
-    </label>
-
-    <label>
-        GPU
-        <input id="gpu" type="range" min="1" max="100" value="100">
-        <b id="gpuV">100</b>
-    </label>
-
-    <label>
-        WORKERS
-        <input id="workers" type="range" min="1" max="16" value="8">
-        <b id="workersV">8</b>
-    </label>
-
-    <label>
-        MEMORY
-        <input id="memory" type="range" min="1" max="512" value="256">
-        <b id="memoryV">256MB</b>
-    </label>
-
-    <div id="stats">
-        READY
+    <div class="container">
+        <h1>PRIME CHECKER</h1>
+        <input type="text" id="numberInput" placeholder="数字を入力してください" autocomplete="off">
+        <button onclick="checkPrime()">判定する</button>
+        <div id="result"></div>
     </div>
 
-</div>
-
-<div id="stage">
-    <canvas id="canvas"></canvas>
-</div>
-
-
-<script>
-
-"use strict";
-
-
-/* =========================================================
-   CONFIGURATION
-========================================================= */
-
-const MAX_MEMORY_MB = 4096;
-const MAX_WORKERS = 64;
-
-let running = false;
-let workers = [];
-let memoryBlocks = [];
-
-let startTime = 0;
-let frames = 0;
-let fps = 0;
-let lastFPS = performance.now();
-
-let raf = null;
-
-
-/* =========================================================
-   ELEMENTS
-========================================================= */
-
-const canvas =
-    document.getElementById("canvas");
-
-const ctx =
-    canvas.getContext("2d", {
-        alpha:false,
-        desynchronized:false
-    });
-
-const cpuSlider =
-    document.getElementById("cpu");
-
-const gpuSlider =
-    document.getElementById("gpu");
-
-const workerSlider =
-    document.getElementById("workers");
-
-const memorySlider =
-    document.getElementById("memory");
-
-const stats =
-    document.getElementById("stats");
-
-
-cpuSlider.oninput =
-    () => cpuV.textContent = cpuSlider.value;
-
-gpuSlider.oninput =
-    () => gpuV.textContent = gpuSlider.value;
-
-workerSlider.oninput =
-    () => workersV.textContent = workerSlider.value;
-
-memorySlider.oninput =
-    () => memoryV.textContent =
-        memorySlider.value + "MB";
-
-
-/* =========================================================
-   CANVAS
-========================================================= */
-
-function resize(){
-
-    const dpr =
-        Math.min(
-            window.devicePixelRatio || 1,
-            2
-        );
-
-    canvas.width =
-        Math.floor(innerWidth * dpr);
-
-    canvas.height =
-        Math.floor(
-            (innerHeight - 95) * dpr
-        );
-
-    ctx.setTransform(
-        dpr,0,0,dpr,0,0
-    );
-}
-
-resize();
-
-addEventListener(
-    "resize",
-    resize,
-    {passive:true}
-);
-
-
-/* =========================================================
-   CPU STRESS
-========================================================= */
-
-function heavyMath(iterations){
-
-    let a = 0.123456789;
-
-    for(let i=0;i<iterations;i++){
-
-        a =
-            Math.sin(a * 1.000001) *
-            Math.cos(a + 0.000001) +
-            Math.sqrt(
-                Math.abs(a) + 1
-            );
-
-        a =
-            Math.tan(
-                Math.atan(a)
-            ) + 0.0000001;
-
-        a =
-            Math.log(
-                Math.abs(a) + 1.000001
-            );
-
-        a =
-            Math.exp(
-                Math.min(a,10)
-            ) * 0.000001;
-    }
-
-    return a;
-}
-
-
-function cpuStress(){
-
-    const level =
-        Number(cpuSlider.value);
-
-    /*
-      1フレームあたりの計算量。
-      最大でもブラウザのイベントループを
-      永久に占有しないよう上限を設定。
-    */
-
-    const iterations =
-        Math.floor(
-            50000 +
-            level * 120000
-        );
-
-    heavyMath(iterations);
-}
-
-
-/* =========================================================
-   MEMORY STRESS
-========================================================= */
-
-function memoryStress(){
-
-    const target =
-        Math.min(
-            Number(memorySlider.value),
-            MAX_MEMORY_MB
-        );
-
-    const targetBytes =
-        target * 1024 * 1024;
-
-    /*
-      8MB単位で確保。
-      ArrayBufferなのでJSヒープとは別の
-      ArrayBuffer領域への負荷を観測できる。
-    */
-
-    const blockSize =
-        8 * 1024 * 1024;
-
-    while(
-        memoryBlocks.reduce(
-            (sum,b) => sum + b.byteLength,
-            0
-        ) < targetBytes
-    ){
-
-        if(
-            memoryBlocks.length >=
-            Math.ceil(
-                MAX_MEMORY_MB / 8
-            )
-        ) break;
-
-        const block =
-            new Uint8Array(blockSize);
-
-        /*
-          実際にページへ触れて
-          lazy allocationだけにならないようにする。
-        */
-
-        for(
-            let i=0;
-            i<block.length;
-            i+=4096
-        ){
-            block[i] =
-                (i * 31) & 255;
-        }
-
-        memoryBlocks.push(block);
-    }
-}
-
-
-/* =========================================================
-   WORKER
-========================================================= */
-
-const workerSource = `
-
-let running = true;
-
-function burn(){
-
-    let x = Math.random();
-
-    /*
-      Worker側でもCPU負荷を発生。
-    */
-
-    for(
-        let i=0;
-        i<220000;
-        i++
-    ){
-
-        x =
-            Math.sin(x * 1.000001) *
-            Math.cos(x + 0.000001);
-
-        x =
-            Math.sqrt(
-                Math.abs(x)+1
-            );
-
-        x =
-            Math.log(
-                x + 1.000001
-            );
-    }
-
-    if(running)
-        setTimeout(burn,0);
-}
-
-self.onmessage = e => {
-
-    if(e.data === "start")
-        burn();
-
-    if(e.data === "stop")
-        running = false;
-};
-
-`;
-
-
-function createWorker(){
-
-    const blob =
-        new Blob(
-            [workerSource],
-            {
-                type:
-                "application/javascript"
+    <script>
+        // べき乗剰余 (base^exponent % modulus) を高速に計算する関数 (BigInt用)
+        function powerMod(base, exponent, modulus) {
+            if (modulus === 1n) return 0n;
+            let result = 1n;
+            base = base % modulus;
+            while (exponent > 0n) {
+                if (exponent % 2n === 1n) result = (result * base) % modulus;
+                exponent = exponent / 2n;
+                base = (base * base) % modulus;
             }
-        );
-
-    const url =
-        URL.createObjectURL(blob);
-
-    const worker =
-        new Worker(url);
-
-    worker.postMessage("start");
-
-    return {
-        worker,
-        url
-    };
-}
-
-
-function updateWorkers(){
-
-    const target =
-        Math.min(
-            Number(workerSlider.value),
-            MAX_WORKERS
-        );
-
-    while(
-        workers.length < target
-    ){
-        workers.push(
-            createWorker()
-        );
-    }
-
-    while(
-        workers.length > target
-    ){
-
-        const item =
-            workers.pop();
-
-        item.worker.postMessage("stop");
-        item.worker.terminate();
-
-        URL.revokeObjectURL(
-            item.url
-        );
-    }
-}
-
-
-/* =========================================================
-   GPU / CANVAS STRESS
-========================================================= */
-
-function gpuStress(){
-
-    const level =
-        Number(gpuSlider.value);
-
-    const w = innerWidth;
-    const h = innerHeight - 95;
-
-    /*
-      レベルに応じて描画オブジェクト数を増加。
-    */
-
-    const count =
-        Math.floor(
-            1000 +
-            level * 100
-        );
-
-    ctx.globalCompositeOperation =
-        "lighter";
-
-    for(
-        let i=0;
-        i<count;
-        i++
-    ){
-
-        const x =
-            Math.random() * w;
-
-        const y =
-            Math.random() * h;
-
-        const r =
-            1 + Math.random() * 30;
-
-        ctx.beginPath();
-
-        ctx.arc(
-            x,
-            y,
-            r,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fillStyle =
-            `hsl(${Math.random()*360},100%,50%)`;
-
-        ctx.fill();
-    }
-
-    /*
-      大量の画像処理相当。
-    */
-
-    const image =
-        ctx.getImageData(
-            0,
-            0,
-            Math.min(w,1000),
-            Math.min(h,500)
-        );
-
-    const data =
-        image.data;
-
-    for(
-        let i=0;
-        i<data.length;
-        i+=4
-    ){
-
-        data[i] =
-            255 - data[i];
-
-        data[i+1] =
-            255 - data[i+1];
-
-        data[i+2] =
-            255 - data[i+2];
-    }
-
-    ctx.putImageData(
-        image,
-        0,
-        0
-    );
-
-    ctx.globalCompositeOperation =
-        "source-over";
-}
-
-
-/* =========================================================
-   FPS
-========================================================= */
-
-function updateFPS(){
-
-    frames++;
-
-    const now =
-        performance.now();
-
-    if(
-        now - lastFPS >= 1000
-    ){
-
-        fps = frames;
-
-        frames = 0;
-
-        lastFPS = now;
-    }
-}
-
-
-/* =========================================================
-   MAIN LOOP
-========================================================= */
-
-function loop(){
-
-    if(!running)
-        return;
-
-    /*
-      背景クリア
-    */
-
-    ctx.fillStyle = "#000";
-
-    ctx.fillRect(
-        0,
-        0,
-        innerWidth,
-        innerHeight
-    );
-
-
-    /*
-      CPU
-    */
-
-    cpuStress();
-
-
-    /*
-      Memory
-    */
-
-    memoryStress();
-
-
-    /*
-      Workers
-    */
-
-    updateWorkers();
-
-
-    /*
-      GPU / Rendering
-    */
-
-    gpuStress();
-
-
-    /*
-      FPS
-    */
-
-    updateFPS();
-
-
-    const elapsed =
-        (
-            performance.now() -
-            startTime
-        ) / 1000;
-
-
-    const mem =
-        memoryBlocks.reduce(
-            (sum,b) =>
-                sum + b.byteLength,
-            0
-        ) / 1024 / 1024;
-
-
-    stats.textContent =
-        "RUNNING | " +
-        "FPS: " + fps +
-        " | Workers: " +
-        workers.length +
-        " | ArrayBuffer: " +
-        mem.toFixed(0) +
-        "MB | Time: " +
-        elapsed.toFixed(1) +
-        "s";
-
-
-    raf =
-        requestAnimationFrame(
-            loop
-        );
-}
-
-
-/* =========================================================
-   START
-========================================================= */
-
-function start(){
-
-    if(running)
-        return;
-
-    running = true;
-
-    startTime =
-        performance.now();
-
-    frames = 0;
-
-    fps = 0;
-
-    lastFPS =
-        performance.now();
-
-    /*
-      初期メモリ確保
-    */
-
-    memoryStress();
-
-    updateWorkers();
-
-    loop();
-}
-
-
-/* =========================================================
-   STOP
-========================================================= */
-
-function stop(){
-
-    running = false;
-
-    if(raf !== null){
-
-        cancelAnimationFrame(
-            raf
-        );
-
-        raf = null;
-    }
-
-
-    /*
-      Worker停止
-    */
-
-    for(
-        const item of workers
-    ){
-
-        item.worker.postMessage(
-            "stop"
-        );
-
-        item.worker.terminate();
-
-        URL.revokeObjectURL(
-            item.url
-        );
-    }
-
-    workers = [];
-
-
-    /*
-      メモリ解放
-    */
-
-    memoryBlocks = [];
-
-
-    /*
-      Canvas解放
-    */
-
-    ctx.clearRect(
-        0,
-        0,
-        innerWidth,
-        innerHeight
-    );
-
-
-    stats.textContent =
-        "STOPPED";
-}
-
-
-/* =========================================================
-   BUTTONS
-========================================================= */
-
-document
-    .getElementById("start")
-    .onclick = start;
-
-document
-    .getElementById("stop")
-    .onclick = stop;
-
-
-/* =========================================================
-   EMERGENCY STOP
-========================================================= */
-
-window.addEventListener(
-    "keydown",
-    e => {
-
-        if(
-            e.key === "Escape"
-        ){
-            stop();
+            return result;
         }
 
-    }
-);
+        // ミラー・ラビン素数判定法
+        function isPrimeMillerRabin(n) {
+            if (n <= 1n) return false;
+            if (n === 2n || n === 3n) return true;
+            if (n % 2n === 0n) return false;
 
-</script>
+            let d = n - 1n;
+            let s = 0n;
+            while (d % 2n === 0n) {
+                d /= 2n;
+                s++;
+            }
 
+            // 判定の精度を上げるための素数の底（これらでテストすれば実用上ほぼ100%正確）
+            const bases = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n, 41n, 43n, 47n, 53n, 59n, 61n, 67n, 71n];
+
+            for (let i = 0; i < bases.length; i++) {
+                let a = bases[i];
+                if (n <= a) break;
+
+                let x = powerMod(a, d, n);
+                if (x === 1n || x === n - 1n) continue;
+
+                let isProbablePrime = false;
+                for (let r = 1n; r < s; r++) {
+                    x = powerMod(x, 2n, n);
+                    if (x === n - 1n) {
+                        isProbablePrime = true;
+                        break;
+                    }
+                }
+                if (!isProbablePrime) return false;
+            }
+            return true;
+        }
+
+        // 判定ボタンが押されたときの処理
+        function checkPrime() {
+            const inputVal = document.getElementById('numberInput').value.trim();
+            const resultDiv = document.getElementById('result');
+            
+            // アニメーションのリセット
+            resultDiv.classList.remove('show');
+            
+            setTimeout(() => {
+                // 入力チェック（半角数字のみか）
+                if (!/^\d+$/.test(inputVal)) {
+                    resultDiv.innerHTML = '<span class="error">有効な自然数（半角数字）を入力してください。</span>';
+                    resultDiv.classList.add('show');
+                    return;
+                }
+
+                try {
+                    const n = BigInt(inputVal);
+                    const isPrime = isPrimeMillerRabin(n);
+
+                    if (isPrime) {
+                        resultDiv.innerHTML = '<span class="prime">素数です (Prime)</span>';
+                    } else {
+                        resultDiv.innerHTML = '<span class="not-prime">素数ではありません</span>';
+                    }
+                } catch (e) {
+                    resultDiv.innerHTML = '<span class="error">数値が大きすぎるか不正です。</span>';
+                }
+                
+                resultDiv.classList.add('show');
+            }, 50); // 少し遅延させてUIの描画とアニメーションをスムーズにする
+        }
+
+        // Enterキーでも判定できるようにする
+        document.getElementById('numberInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                checkPrime();
+            }
+        });
+    </script>
 </body>
 </html>
