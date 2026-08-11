@@ -1,204 +1,362 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prime Checker</title>
-    <style>
-        /* ベースリセットと画面全体の設定 */
-        body {
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background-color: #fafafa;
-            color: #333;
-            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", "Yu Gothic", sans-serif;
-            box-sizing: border-box;
-        }
-
-        /* 中央のメインコンテナ */
-        .container {
-            width: 90%;
-            max-width: 420px;
-            padding: 2.5rem 2rem;
-            background: #ffffff;
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04);
-            text-align: center;
-        }
-
-        h1 {
-            font-size: 1.5rem;
-            font-weight: 300;
-            letter-spacing: 0.1em;
-            margin-bottom: 2rem;
-            color: #1a1a1a;
-        }
-
-        /* 入力フィールド */
-        input[type="text"] {
-            width: 100%;
-            padding: 14px;
-            font-size: 1.2rem;
-            text-align: center;
-            border: 1px solid #eaeaea;
-            border-radius: 8px;
-            background-color: #fdfdfd;
-            box-sizing: border-box;
-            outline: none;
-            transition: all 0.3s ease;
-            font-family: monospace;
-        }
-
-        input[type="text"]:focus {
-            border-color: #b0b0b0;
-            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
-        }
-
-        /* ボタン */
-        button {
-            margin-top: 1.5rem;
-            width: 100%;
-            padding: 14px;
-            font-size: 1rem;
-            letter-spacing: 0.05em;
-            color: #fff;
-            background-color: #222;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background-color 0.2s ease, transform 0.1s ease;
-        }
-
-        button:hover {
-            background-color: #444;
-        }
-
-        button:active {
-            transform: scale(0.98);
-        }
-
-        /* 結果表示エリア */
-        #result {
-            margin-top: 2rem;
-            font-size: 1.2rem;
-            font-weight: 500;
-            min-height: 1.5em;
-            word-break: break-all;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        #result.show {
-            opacity: 1;
-        }
-
-        .prime { color: #2ecc71; }
-        .not-prime { color: #e74c3c; }
-        .error { color: #888; font-size: 0.9rem; font-weight: normal; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高機能 素数チェッカー</title>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+      background-color: #f7f9fc;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: #fff;
+      padding: 20px 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+      position: relative;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 20px;
+      color: #2c3e50;
+    }
+    .settings-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #7f8c8d;
+      transition: color 0.3s;
+    }
+    .settings-btn:hover {
+      color: #34495e;
+    }
+    .settings-panel {
+      display: none;
+      background: #fdfdfd;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .settings-panel.active {
+      display: block;
+    }
+    .setting-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .setting-item input[type="checkbox"] {
+      margin-right: 10px;
+      transform: scale(1.2);
+    }
+    .input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 12px;
+      font-size: 18px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      outline: none;
+      transition: border 0.3s;
+    }
+    input[type="text"]:focus {
+      border-color: #3498db;
+    }
+    button.check-btn {
+      padding: 12px 24px;
+      font-size: 16px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s;
+    }
+    button.check-btn:hover {
+      background-color: #2980b9;
+    }
+    .result-area {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      min-height: 100px;
+    }
+    .result-item {
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px dashed #ccc;
+    }
+    .result-item:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    .result-label {
+      font-weight: bold;
+      color: #555;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .result-value {
+      font-size: 18px;
+      color: #111;
+    }
+    .prime-result {
+      font-size: 24px;
+      font-weight: bold;
+      color: #e74c3c;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .prime-result.is-prime {
+      color: #27ae60;
+    }
+  </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>PRIME CHECKER</h1>
-        <input type="text" id="numberInput" placeholder="数字を入力してください" autocomplete="off">
-        <button onclick="checkPrime()">判定する</button>
-        <div id="result"></div>
-    </div>
+<div class="container">
+  <div class="header">
+    <h1>素数チェッカー</h1>
+    <button class="settings-btn" id="settingsToggle" title="設定">⚙️</button>
+  </div>
 
-    <script>
-        // べき乗剰余 (base^exponent % modulus) を高速に計算する関数 (BigInt用)
-        function powerMod(base, exponent, modulus) {
-            if (modulus === 1n) return 0n;
-            let result = 1n;
-            base = base % modulus;
-            while (exponent > 0n) {
-                if (exponent % 2n === 1n) result = (result * base) % modulus;
-                exponent = exponent / 2n;
-                base = (base * base) % modulus;
-            }
-            return result;
-        }
+  <div class="settings-panel" id="settingsPanel">
+    <div class="setting-item"><input type="checkbox" id="chk-factorization" checked> <label for="chk-factorization">(素数じゃない場合) 素因数分解を表示</label></div>
+    <div class="setting-item"><input type="checkbox" id="chk-div-list"> <label for="chk-div-list">約数一覧を表示</label></div>
+    <div class="setting-item"><input type="checkbox" id="chk-div-count"> <label for="chk-div-count">約数の個数を表示</label></div>
+    <div class="setting-item"><input type="checkbox" id="chk-div-sum"> <label for="chk-div-sum">約数の総和を表示</label></div>
+    <div class="setting-item"><input type="checkbox" id="chk-min-factor"> <label for="chk-min-factor">(素数じゃない場合) 最小の素因数を表示</label></div>
+    <div class="setting-item"><input type="checkbox" id="chk-max-factor"> <label for="chk-max-factor">(素数じゃない場合) 最大の素因数を表示</label></div>
+    <div class="setting-item"><input type="checkbox" id="chk-prev-prime"> <label for="chk-prev-prime">直前の素数を表示</label></div>
+    <div class="setting-item"><input type="checkbox" id="chk-next-prime"> <label for="chk-next-prime">直後の素数を表示</label></div>
+    <div class="setting-item"><input type="checkbox" id="chk-closest-prime"> <label for="chk-closest-prime">最も近い素数を表示</label></div>
+    <div class="setting-item"><input type="checkbox" id="chk-prime-index"> <label for="chk-prime-index">何番目の素数かを表示</label></div>
+  </div>
 
-        // ミラー・ラビン素数判定法
-        function isPrimeMillerRabin(n) {
-            if (n <= 1n) return false;
-            if (n === 2n || n === 3n) return true;
-            if (n % 2n === 0n) return false;
+  <div class="input-group">
+    <input type="text" id="numberInput" inputmode="numeric" placeholder="自然数を入力 (例: 324)" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+    <button class="check-btn" onclick="analyzeNumber()">判定</button>
+  </div>
 
-            let d = n - 1n;
-            let s = 0n;
-            while (d % 2n === 0n) {
-                d /= 2n;
-                s++;
-            }
+  <div class="result-area" id="resultArea">
+    ここに結果が表示されます。
+  </div>
+</div>
 
-            // 判定の精度を上げるための素数の底（これらでテストすれば実用上ほぼ100%正確）
-            const bases = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n, 41n, 43n, 47n, 53n, 59n, 61n, 67n, 71n];
+<script>
+  // 設定パネルの開閉
+  document.getElementById('settingsToggle').addEventListener('click', () => {
+    document.getElementById('settingsPanel').classList.toggle('active');
+  });
 
-            for (let i = 0; i < bases.length; i++) {
-                let a = bases[i];
-                if (n <= a) break;
+  // Enterキーで判定を実行
+  document.getElementById('numberInput').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') analyzeNumber();
+  });
 
-                let x = powerMod(a, d, n);
-                if (x === 1n || x === n - 1n) continue;
+  // 素数判定関数
+  function isPrime(num) {
+    if (num <= 1) return false;
+    if (num <= 3) return true;
+    if (num % 2 === 0 || num % 3 === 0) return false;
+    for (let i = 5; i * i <= num; i += 6) {
+      if (num % i === 0 || num % (i + 2) === 0) return false;
+    }
+    return true;
+  }
 
-                let isProbablePrime = false;
-                for (let r = 1n; r < s; r++) {
-                    x = powerMod(x, 2n, n);
-                    if (x === n - 1n) {
-                        isProbablePrime = true;
-                        break;
-                    }
-                }
-                if (!isProbablePrime) return false;
-            }
-            return true;
-        }
+  // 素因数分解関数
+  function getPrimeFactors(num) {
+    let factors = {};
+    let n = num;
+    let d = 2;
+    while (d * d <= n) {
+      while (n % d === 0) {
+        factors[d] = (factors[d] || 0) + 1;
+        n /= d;
+      }
+      d++;
+    }
+    if (n > 1) {
+      factors[n] = (factors[n] || 0) + 1;
+    }
+    return factors;
+  }
 
-        // 判定ボタンが押されたときの処理
-        function checkPrime() {
-            const inputVal = document.getElementById('numberInput').value.trim();
-            const resultDiv = document.getElementById('result');
-            
-            // アニメーションのリセット
-            resultDiv.classList.remove('show');
-            
-            setTimeout(() => {
-                // 入力チェック（半角数字のみか）
-                if (!/^\d+$/.test(inputVal)) {
-                    resultDiv.innerHTML = '<span class="error">有効な自然数（半角数字）を入力してください。</span>';
-                    resultDiv.classList.add('show');
-                    return;
-                }
+  // 約数取得関数
+  function getDivisors(num) {
+    let divs = [];
+    for (let i = 1; i * i <= num; i++) {
+      if (num % i === 0) {
+        divs.push(i);
+        if (i * i !== num) divs.push(num / i);
+      }
+    }
+    return divs.sort((a, b) => a - b);
+  }
 
-                try {
-                    const n = BigInt(inputVal);
-                    const isPrime = isPrimeMillerRabin(n);
+  // 前の素数
+  function getPrevPrime(num) {
+    let i = num - 1;
+    while (i > 1) {
+      if (isPrime(i)) return i;
+      i--;
+    }
+    return null;
+  }
 
-                    if (isPrime) {
-                        resultDiv.innerHTML = '<span class="prime">素数です (Prime)</span>';
-                    } else {
-                        resultDiv.innerHTML = '<span class="not-prime">素数ではありません</span>';
-                    }
-                } catch (e) {
-                    resultDiv.innerHTML = '<span class="error">数値が大きすぎるか不正です。</span>';
-                }
-                
-                resultDiv.classList.add('show');
-            }, 50); // 少し遅延させてUIの描画とアニメーションをスムーズにする
-        }
+  // 次の素数
+  function getNextPrime(num) {
+    let i = num + 1;
+    while (true) {
+      if (isPrime(i)) return i;
+      i++;
+    }
+  }
 
-        // Enterキーでも判定できるようにする
-        document.getElementById('numberInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                checkPrime();
-            }
-        });
-    </script>
+  // 何番目の素数か (愚直に数えるため大きすぎる数は時間がかかるので適度な範囲を想定)
+  function getPrimeIndex(num) {
+    if (!isPrime(num)) return null;
+    let count = 0;
+    for (let i = 2; i <= num; i++) {
+      if (isPrime(i)) count++;
+    }
+    return count;
+  }
+
+  // メイン判定処理
+  function analyzeNumber() {
+    const inputVal = document.getElementById('numberInput').value;
+    if (!inputVal) return;
+    
+    const num = parseInt(inputVal, 10);
+    if (num < 1) {
+      document.getElementById('resultArea').innerHTML = '<div class="prime-result">自然数（1以上）を入力してください。</div>';
+      return;
+    }
+
+    const isPrimeNum = isPrime(num);
+    const resultArea = document.getElementById('resultArea');
+    let html = '';
+
+    // ① 素数かどうかの結果
+    if (num === 1) {
+      html += `<div class="prime-result">1 は素数でも合成数でもありません。</div>`;
+    } else if (isPrimeNum) {
+      html += `<div class="prime-result is-prime">${num} は素数です！</div>`;
+    } else {
+      html += `<div class="prime-result">${num} は素数ではありません（合成数）。</div>`;
+    }
+
+    // 各種設定に基づく計算と表示
+    const factors = getPrimeFactors(num);
+    const factorKeys = Object.keys(factors).map(Number);
+    const divisors = getDivisors(num);
+
+    // [素因数分解を表示]
+    if (!isPrimeNum && num > 1 && document.getElementById('chk-factorization').checked) {
+      let factHtml = factorKeys.map(base => {
+        let exp = factors[base];
+        return exp > 1 ? `${base}<sup>${exp}</sup>` : `${base}`;
+      }).join(' &times; ');
+      html += `<div class="result-item"><div class="result-label">素因数分解</div><div class="result-value">${factHtml}</div></div>`;
+    }
+
+    // [約数一覧を表示]
+    if (document.getElementById('chk-div-list').checked) {
+      html += `<div class="result-item"><div class="result-label">約数一覧</div><div class="result-value">${divisors.join(', ')}</div></div>`;
+    }
+
+    // [約数の個数を表示]
+    if (document.getElementById('chk-div-count').checked) {
+      html += `<div class="result-item"><div class="result-label">約数の個数</div><div class="result-value">${divisors.length} 個</div></div>`;
+    }
+
+    // [約数の総和を表示]
+    if (document.getElementById('chk-div-sum').checked) {
+      const sum = divisors.reduce((acc, val) => acc + val, 0);
+      html += `<div class="result-item"><div class="result-label">約数の総和</div><div class="result-value">${sum}</div></div>`;
+    }
+
+    // [最小の素因数を表示]
+    if (!isPrimeNum && num > 1 && document.getElementById('chk-min-factor').checked) {
+      const minFactor = Math.min(...factorKeys);
+      html += `<div class="result-item"><div class="result-label">最小の素因数</div><div class="result-value">${minFactor}</div></div>`;
+    }
+
+    // [最大の素因数を表示]
+    if (!isPrimeNum && num > 1 && document.getElementById('chk-max-factor').checked) {
+      const maxFactor = Math.max(...factorKeys);
+      html += `<div class="result-item"><div class="result-label">最大の素因数</div><div class="result-value">${maxFactor}</div></div>`;
+    }
+
+    // [直前の素数を表示]
+    if (document.getElementById('chk-prev-prime').checked) {
+      const prev = getPrevPrime(num);
+      const val = prev ? prev : 'なし (2未満)';
+      html += `<div class="result-item"><div class="result-label">直前の素数</div><div class="result-value">${val}</div></div>`;
+    }
+
+    // [直後の素数を表示]
+    if (document.getElementById('chk-next-prime').checked) {
+      const next = getNextPrime(num);
+      html += `<div class="result-item"><div class="result-label">直後の素数</div><div class="result-value">${next}</div></div>`;
+    }
+
+    // [最も近い素数を表示]
+    if (document.getElementById('chk-closest-prime').checked) {
+      const prev = getPrevPrime(num);
+      const next = getNextPrime(num);
+      let closest = [];
+      if (!prev) {
+        closest.push(next);
+      } else {
+        const diff1 = num - prev;
+        const diff2 = next - num;
+        if (diff1 === diff2) closest = [prev, next];
+        else if (diff1 < diff2) closest = [prev];
+        else closest = [next];
+      }
+      html += `<div class="result-item"><div class="result-label">最も近い素数</div><div class="result-value">${closest.join(', ')}</div></div>`;
+    }
+
+    // [何番目の素数かを表示]
+    if (document.getElementById('chk-prime-index').checked) {
+      if (isPrimeNum) {
+        const index = getPrimeIndex(num);
+        html += `<div class="result-item"><div class="result-label">素数の順番</div><div class="result-value">${index} 番目の素数</div></div>`;
+      } else {
+        html += `<div class="result-item"><div class="result-label">素数の順番</div><div class="result-value" style="font-size:14px; color:#777;">※素数ではないため計算されません</div></div>`;
+      }
+    }
+
+    resultArea.innerHTML = html;
+  }
+</script>
+
 </body>
 </html>
